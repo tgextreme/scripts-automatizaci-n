@@ -99,10 +99,19 @@ if eselect profile list | grep -qE 'amd64/.*systemd'; then
   eselect profile set "${TARGET}"
 fi
 
-log "E) Ajustes Portage: GRUB BIOS"
+log "E) Ajustes Portage: GRUB BIOS, licencias y keywords"
 mkdir -p /etc/portage/package.use
 mkdir -p /etc/portage/package.accept_keywords
+mkdir -p /etc/portage/package.license
 grep -q '^GRUB_PLATFORMS=' /etc/portage/make.conf 2>/dev/null || echo 'GRUB_PLATFORMS="pc"' >> /etc/portage/make.conf
+
+# Aceptar licencias redistributables del firmware
+echo "sys-kernel/linux-firmware linux-fw-redistributable no-source-code" > /etc/portage/package.license/linux-firmware
+echo "sys-firmware/linux-firmware linux-fw-redistributable no-source-code" >> /etc/portage/package.license/linux-firmware
+
+# Aceptar keywords ~amd64 si es necesario
+echo "sys-kernel/linux-firmware ~amd64" > /etc/portage/package.accept_keywords/firmware
+echo "sys-kernel/gentoo-kernel-bin ~amd64" >> /etc/portage/package.accept_keywords/firmware
 
 log "F) Instalando kernel binario precompilado (más rápido y sin problemas de masked)"
 # Usar kernel binario para evitar problemas con versiones masked y compilación larga

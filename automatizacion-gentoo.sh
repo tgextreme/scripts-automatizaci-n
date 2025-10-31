@@ -101,26 +101,33 @@ fi
 
 log "E) Ajustes Portage: GRUB BIOS + dracut para installkernel"
 mkdir -p /etc/portage/package.use
+mkdir -p /etc/portage/package.accept_keywords
 echo "sys-kernel/installkernel dracut" > /etc/portage/package.use/installkernel-dracut
 grep -q '^GRUB_PLATFORMS=' /etc/portage/make.conf 2>/dev/null || echo 'GRUB_PLATFORMS="pc"' >> /etc/portage/make.conf
 
+# Aceptar keywords ~amd64 para paquetes del kernel si es necesario
+echo "sys-kernel/vanilla-sources ~amd64" > /etc/portage/package.accept_keywords/kernel
+echo "sys-kernel/linux-firmware ~amd64" >> /etc/portage/package.accept_keywords/kernel
+echo "sys-firmware/linux-firmware ~amd64" >> /etc/portage/package.accept_keywords/kernel
+
 log "F) Paquetes base: kernel vanilla, dracut, grub2 (BIOS), firmware, headers, dhcpcd"
-emerge -q --autounmask-write=y \
+# Primera pasada: dejar que autounmask escriba los cambios necesarios
+emerge --autounmask-write=y \
   sys-kernel/vanilla-sources sys-kernel/dracut sys-boot/grub:2 \
   sys-kernel/installkernel sys-kernel/linux-headers sys-firmware/linux-firmware \
-  net-misc/dhcpcd || true
+  net-misc/dhcpcd 2>&1 || true
 
-# Aplicar cambios de autounmask si existen
-etc-update --automode -5 2>/dev/null || true
-dispatch-conf <<< "u" 2>/dev/null || true
+# Aplicar todos los cambios de configuración automáticamente
+if [ -d /etc/portage/._cfg0000_* ] || find /etc/portage -name '._cfg*' 2>/dev/null | grep -q .; then
+  yes | etc-update --automode -5 2>/dev/null || true
+  find /etc/portage -name '._cfg*' -exec mv {} {}.bak \; 2>/dev/null || true
+fi
 
-# Intentar emerge de nuevo después de aplicar cambios
+# Segunda pasada: instalar realmente los paquetes
 emerge -q \
   sys-kernel/vanilla-sources sys-kernel/dracut sys-boot/grub:2 \
   sys-kernel/installkernel sys-kernel/linux-headers sys-firmware/linux-firmware \
-  net-misc/dhcpcd
-
-etc-update --automode -5 2>/dev/null || true
+  net-misc/dhcpcd || die "Fallo al instalar paquetes base"
 
 log "G) Preparar /usr/src/linux -> última versión de vanilla-sources"
 cd /usr/src

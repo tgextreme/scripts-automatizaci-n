@@ -42,8 +42,9 @@ else
 fi
 
 log "Paso 2) Montando ${ROOT} -> ${MNT} y ${BOOT} -> ${MNT}/boot"
-mkdir -p "${MNT}/boot"
+mkdir -p "${MNT}"
 mount -o rw "${ROOT}" "${MNT}"
+mkdir -p "${MNT}/boot"
 mount -o rw "${BOOT}" "${MNT}/boot"
 
 log "Paso 3) Descargando stage3 systemd amd64 más reciente"

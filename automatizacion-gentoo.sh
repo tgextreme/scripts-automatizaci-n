@@ -99,86 +99,22 @@ if eselect profile list | grep -qE 'amd64/.*systemd'; then
   eselect profile set "${TARGET}"
 fi
 
-log "E) Ajustes Portage: GRUB BIOS + dracut para installkernel"
+log "E) Ajustes Portage: GRUB BIOS"
 mkdir -p /etc/portage/package.use
 mkdir -p /etc/portage/package.accept_keywords
-echo "sys-kernel/installkernel dracut" > /etc/portage/package.use/installkernel-dracut
 grep -q '^GRUB_PLATFORMS=' /etc/portage/make.conf 2>/dev/null || echo 'GRUB_PLATFORMS="pc"' >> /etc/portage/make.conf
 
-# Aceptar keywords ~amd64 para paquetes del kernel si es necesario
-echo "sys-kernel/vanilla-sources ~amd64" > /etc/portage/package.accept_keywords/kernel
-echo "sys-kernel/linux-firmware ~amd64" >> /etc/portage/package.accept_keywords/kernel
-echo "sys-firmware/linux-firmware ~amd64" >> /etc/portage/package.accept_keywords/kernel
+log "F) Instalando kernel binario precompilado (más rápido y sin problemas de masked)"
+# Usar kernel binario para evitar problemas con versiones masked y compilación larga
+emerge -q sys-kernel/gentoo-kernel-bin sys-kernel/linux-firmware \
+  sys-boot/grub:2 net-misc/dhcpcd || die "Fallo al instalar paquetes base"
 
-log "F) Paquetes base: kernel vanilla, dracut, grub2 (BIOS), firmware, headers, dhcpcd"
-# Primera pasada: dejar que autounmask escriba los cambios necesarios
-emerge --autounmask-write=y \
-  sys-kernel/vanilla-sources sys-kernel/dracut sys-boot/grub:2 \
-  sys-kernel/installkernel sys-kernel/linux-headers sys-firmware/linux-firmware \
-  net-misc/dhcpcd 2>&1 || true
+log "G) El kernel binario ya incluye initramfs, verificando instalación"
+KVER=$(ls -1 /lib/modules/ | sort -V | tail -n1)
+[ -n "${KVER}" ] || die "No se encontró kernel instalado en /lib/modules"
+log "   Versión del kernel instalado: ${KVER}"
 
-# Aplicar todos los cambios de configuración automáticamente
-if [ -d /etc/portage/._cfg0000_* ] || find /etc/portage -name '._cfg*' 2>/dev/null | grep -q .; then
-  yes | etc-update --automode -5 2>/dev/null || true
-  find /etc/portage -name '._cfg*' -exec mv {} {}.bak \; 2>/dev/null || true
-fi
-
-# Segunda pasada: instalar realmente los paquetes
-emerge -q \
-  sys-kernel/vanilla-sources sys-kernel/dracut sys-boot/grub:2 \
-  sys-kernel/installkernel sys-kernel/linux-headers sys-firmware/linux-firmware \
-  net-misc/dhcpcd || die "Fallo al instalar paquetes base"
-
-log "G) Preparar /usr/src/linux -> última versión de vanilla-sources"
-cd /usr/src
-LATEST="$(ls -d vanilla-sources-* | sort -V | tail -n1)"
-[ -n "${LATEST}" ] || die "No se encontró vanilla-sources instalado."
-ln -sfn "/usr/src/${LATEST}" /usr/src/linux
-cd /usr/src/linux
-
-log "H) Configuración rápida del kernel (defconfig + flags mínimas)"
-make mrproper
-make defconfig
-
-# Asegurar que estamos en 64-bit
-./scripts/config --enable 64BIT || true
-./scripts/config --enable X86_64 || true
-
-# Activar initramfs y autodescubrimiento de dispositivos básicos
-./scripts/config --enable BLK_DEV_INITRD || true
-./scripts/config --enable DEVTMPFS || true
-./scripts/config --enable DEVTMPFS_MOUNT || true
-./scripts/config --enable EXT4_FS || true
-./scripts/config --enable EXT4_USE_FOR_EXT2 || true
-./scripts/config --enable SCSI || true
-./scripts/config --enable BLK_DEV_SD || true
-./scripts/config --enable ATA || true
-./scripts/config --enable ATA_ACPI || true
-./scripts/config --enable SATA_AHCI || true
-./scripts/config --enable ATA_PIIX || true
-./scripts/config --enable PATA_AMD || true
-./scripts/config --enable PATA_OLDPIIX || true
-./scripts/config --enable PATA_SCH || true
-./scripts/config --module NVME_CORE || true
-./scripts/config --module MD || true
-./scripts/config --module DM_CRYPT || true
-yes "" | make olddefconfig
-
-log "I) Compilando kernel y módulos (tarda según CPU)"
-make -j"$(nproc)"
-make modules_install
-
-KVER="$(make kernelrelease)"
-log "   Versión del kernel: ${KVER}"
-
-log "J) Instalando kernel en /boot/vmlinuz-${KVER}"
-install -D -m 0644 arch/x86/boot/bzImage "/boot/vmlinuz-${KVER}"
-
-log "K) Generando initramfs con dracut"
-dracut --kver "${KVER}" --force
-ls -l "/boot/initramfs-${KVER}.img"
-
-log "L) Configurando hostname, zona horaria y locales"
+log "H) Configurando hostname, zona horaria y locales"
 echo "gentoo-box" > /etc/hostname
 echo "UTC" > /etc/timezone
 emerge --config sys-libs/timezone-data || true
@@ -186,6 +122,30 @@ echo "en_US.UTF-8 UTF-8" >> /etc/locale.gen
 echo "es_ES.UTF-8 UTF-8" >> /etc/locale.gen
 locale-gen
 eselect locale set en_US.utf8 || true
+
+log "I) fstab para sda3(/) y sda1(/boot) en ext4"
+cat > /etc/fstab <<EOF
+/dev/sda3   /      ext4   noatime                0 1
+/dev/sda1   /boot  ext4   noauto,noatime         0 2
+/dev/sda2   none   swap   sw                     0 0
+EOF
+
+log "J) Verificando /boot montado antes de instalar GRUB"
+mountpoint -q /boot || mount /boot
+
+log "K) Instalar GRUB en MBR del disco y generar grub.cfg"
+grub-install /dev/sda
+grub-mkconfig -o /boot/grub/grub.cfg
+
+log "L) Habilitar servicios útiles de systemd (red y hora)"
+systemctl enable dhcpcd.service || true
+systemctl enable systemd-timesyncd.service || true
+
+log "M) Resumen de /boot:"
+ls -l /boot
+ls -l /boot/grub/grub.cfg
+
+log "N) IMPORTANTE: Establece un password a root ahora"
 
 log "M) fstab para sda3(/) y sda1(/boot) en ext4"
 cat > /etc/fstab <<EOF

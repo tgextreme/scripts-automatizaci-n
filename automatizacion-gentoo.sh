@@ -108,6 +108,9 @@ mkdir -p /etc/portage/package.license
 grep -q '^ACCEPT_LICENSE=' /etc/portage/make.conf 2>/dev/null || echo 'ACCEPT_LICENSE="*"' >> /etc/portage/make.conf
 grep -q '^GRUB_PLATFORMS=' /etc/portage/make.conf 2>/dev/null || echo 'GRUB_PLATFORMS="pc"' >> /etc/portage/make.conf
 
+# Configurar USE flags necesarios
+echo "sys-kernel/installkernel dracut" > /etc/portage/package.use/kernel
+
 # También en package.license por redundancia
 echo "sys-kernel/linux-firmware @BINARY-REDISTRIBUTABLE" > /etc/portage/package.license/linux-firmware
 echo "sys-firmware/linux-firmware @BINARY-REDISTRIBUTABLE" >> /etc/portage/package.license/linux-firmware
@@ -117,7 +120,15 @@ echo "sys-kernel/linux-firmware **" > /etc/portage/package.accept_keywords/firmw
 echo "sys-kernel/gentoo-kernel-bin **" >> /etc/portage/package.accept_keywords/firmware
 
 log "F) Instalando kernel binario precompilado (más rápido y sin problemas de masked)"
-# Usar kernel binario para evitar problemas con versiones masked y compilación larga
+# Primera pasada: dejar que emerge escriba configuraciones automáticas
+emerge --autounmask-write -q sys-kernel/gentoo-kernel-bin sys-kernel/linux-firmware \
+  sys-boot/grub:2 net-misc/dhcpcd 2>&1 || true
+
+# Aplicar configuraciones automáticas
+etc-update --automode -5 2>/dev/null || true
+yes | etc-update 2>/dev/null || true
+
+# Segunda pasada: instalar realmente
 emerge -q sys-kernel/gentoo-kernel-bin sys-kernel/linux-firmware \
   sys-boot/grub:2 net-misc/dhcpcd || die "Fallo al instalar paquetes base"
 

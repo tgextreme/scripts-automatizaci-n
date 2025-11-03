@@ -11,8 +11,8 @@ MNT="/mnt/gentoo"
 # Formateo destructivo: déjalo en "YES" para que sea 100% automático.
 ERASE_PARTITIONS="YES"
 
-# Mirror base para stage3 desktop systemd amd64:
-BASE="https://distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64-desktop-systemd"
+# Mirror base para stage3 desktop openrc amd64:
+BASE="https://distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64-desktop-openrc"
 
 # ================== UTILIDADES ==================
 log(){ printf "\n\033[1;32m[+] %s\033[0m\n" "$*"; }
@@ -53,11 +53,11 @@ mount -o rw "${ROOT}" "${MNT}"
 mkdir -p "${MNT}/boot"
 mount -o rw "${BOOT}" "${MNT}/boot"
 
-log "Paso 3) Descargando stage3 desktop systemd amd64 más reciente"
+log "Paso 3) Descargando stage3 desktop openrc amd64 más reciente"
 mkdir -p "${MNT}/var/tmp/stage3"
 cd "${MNT}/var/tmp/stage3"
 # Obtener nombre del último stage3 desde el archivo 'latest-...txt'
-LATEST_TXT="latest-stage3-amd64-desktop-systemd.txt"
+LATEST_TXT="latest-stage3-amd64-desktop-openrc.txt"
 wget -q "${BASE}/${LATEST_TXT}" -O "${LATEST_TXT}"
 STAGE_REL=$(awk '/stage3.*tar.*/{print $1; exit}' "${LATEST_TXT}")   || die "No pude parsear ${LATEST_TXT}"
 STAGE_URL="${BASE}/${STAGE_REL}"
@@ -93,9 +93,9 @@ mountpoint -q /boot || mount /boot || mount /dev/sda1 /boot
 log "C) Sync de Portage (puede tardar)"
 (emaint -a sync || emerge --sync) >/dev/null || true
 
-log "D) Seleccionando perfil systemd si no está ya"
-if eselect profile list | grep -qE 'amd64/.*systemd'; then
-  TARGET="$(eselect profile list | awk '/amd64\/.*systemd/ {print $2}' | sed -n '1p')"
+log "D) Seleccionando perfil openrc si no está ya"
+if eselect profile list | grep -qE 'amd64/.*desktop.*openrc'; then
+  TARGET="$(eselect profile list | awk '/amd64\/.*desktop.*openrc/ {print $2}' | sed -n '1p')"
   eselect profile set "${TARGET}"
 fi
 
@@ -160,9 +160,9 @@ log "K) Instalar GRUB en MBR del disco y generar grub.cfg"
 grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
-log "L) Habilitar servicios útiles de systemd (red y hora)"
-systemctl enable dhcpcd.service || true
-systemctl enable systemd-timesyncd.service || true
+log "L) Habilitar servicios útiles de OpenRC (red y hora)"
+rc-update add dhcpcd default || true
+rc-update add hwclock boot || true
 
 log "M) Resumen de /boot:"
 ls -l /boot
@@ -191,9 +191,9 @@ log "O) Instalar GRUB en MBR del disco y generar grub.cfg"
 grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
 
-log "P) Habilitar servicios útiles de systemd (red y hora)"
-systemctl enable dhcpcd.service || true
-systemctl enable systemd-timesyncd.service || true
+log "P) Habilitar servicios útiles de OpenRC (red y hora)"
+rc-update add dhcpcd default || true
+rc-update add hwclock boot || true
 
 log "Q) Resumen de /boot:"
 ls -l /boot
@@ -236,13 +236,13 @@ UNMASK
 mkdir -p /etc/portage/package.use
 cat > /etc/portage/package.use/00-kde <<'USEEOF'
 # Display manager / compositor
-x11-misc/sddm -wayland
+x11-misc/sddm -wayland -systemd elogind
 kde-plasma/kwin -wayland lock
 kde-plasma/kwin-x11 lock
-kde-plasma/plasma-meta -wayland
-kde-plasma/plasma-workspace -wayland
+kde-plasma/plasma-meta -wayland -systemd elogind
+kde-plasma/plasma-workspace -wayland elogind
 # Xorg
-x11-base/xorg-server udev
+x11-base/xorg-server udev elogind
 # Qt6
 dev-qt/qtbase icu gui network xml concurrent widgets libproxy cups dbus vulkan wayland -opengl -gles2-only
 dev-qt/qttools opengl
@@ -272,18 +272,21 @@ x11-libs/gtk+:3 X -wayland
 x11-libs/libdrm video_cards_amdgpu video_cards_nouveau video_cards_intel
 media-libs/mesa -wayland
 media-libs/libcanberra pulseaudio udev alsa -gstreamer
+sys-auth/polkit elogind -systemd
+sys-apps/dbus elogind -systemd
 USEEOF
 
 log "V) Instalando KDE Plasma (esto tomará 1-3 horas)..."
-emerge --autounmask-write --autounmask-continue -q kde-plasma/plasma-meta x11-misc/sddm \
+emerge --autounmask-write --autounmask-continue -q sys-auth/elogind kde-plasma/plasma-meta x11-misc/sddm \
   kde-apps/dolphin kde-apps/konsole kde-apps/kate www-client/firefox-bin || {
   etc-update --automode -3
-  emerge -q kde-plasma/plasma-meta x11-misc/sddm kde-apps/dolphin kde-apps/konsole kde-apps/kate www-client/firefox-bin
+  emerge -q sys-auth/elogind kde-plasma/plasma-meta x11-misc/sddm kde-apps/dolphin kde-apps/konsole kde-apps/kate www-client/firefox-bin
 }
 
-log "W) Habilitando SDDM (display manager de KDE)"
-systemctl enable sddm
-systemctl set-default graphical.target
+log "W) Habilitando SDDM y elogind (display manager de KDE)"
+rc-update add elogind boot || true
+rc-update add dbus default || true
+rc-update add sddm default || true
 
 log "X) KDE Plasma instalado correctamente"
 

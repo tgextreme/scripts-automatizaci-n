@@ -78,7 +78,6 @@ mount --rbind /dev "${MNT}/dev" && mount --make-rslave "${MNT}/dev"
 
 # -------- Script que se ejecuta dentro del chroot --------
 cat > "${MNT}/root/instala_dentro.sh" <<'CHROOT_SCRIPT'
-#!/bin/bash
 set -euo pipefail
 log(){ printf "\n\033[1;36m[CHROOT] %s\033[0m\n" "$*"; }
 die(){ printf "\n\033[1;31m[CHROOT][!] %s\033[0m\n" "$*"; exit 1; }

@@ -221,6 +221,18 @@ dev-qt/* ~amd64
 dev-util/vulkan-headers ~amd64
 KEOF
 
+# Desenmascarar paquetes Qt6 necesarios
+mkdir -p /etc/portage/package.unmask
+cat > /etc/portage/package.unmask/kde <<'UNMASK'
+dev-qt/qtbase
+dev-qt/qtquick3d
+dev-qt/qtmultimedia
+dev-qt/qtdeclarative
+kde-plasma/kdeplasma-addons
+kde-plasma/plasma-meta
+x11-libs/kirigami-addons
+UNMASK
+
 mkdir -p /etc/portage/package.use
 cat > /etc/portage/package.use/00-kde <<'USEEOF'
 # Display manager / compositor

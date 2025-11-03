@@ -204,7 +204,7 @@ echo "root:gentoo" | chpasswd
 echo "   Password temporal de root: 'gentoo' - CÁMBIALO tras el primer arranque con 'passwd'"
 
 log "S) Creando usuario para KDE"
-useradd -m -G users,wheel,audio,video,input,plugdev -s /bin/bash usuario || true
+useradd -m -G users,wheel,audio,video,input -s /bin/bash usuario || true
 echo "usuario:usuario" | chpasswd
 echo "   Usuario: usuario / Password: usuario"
 

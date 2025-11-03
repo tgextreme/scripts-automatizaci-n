@@ -205,8 +205,8 @@ echo "   Password temporal de root: 'gentoo' - CÁMBIALO tras el primer arranque
 
 log "S) Creando usuario para KDE"
 useradd -m -G users,wheel,audio,video,input -s /bin/bash usuario || true
-echo "usuario:usuario" | chpasswd
-echo "   Usuario: usuario / Password: usuario"
+echo "usuario:gentoo" | chpasswd
+echo "   Usuario: usuario / Password: gentoo"
 
 log "T) Configurando sudo para el grupo wheel"
 emerge -q app-admin/sudo || true

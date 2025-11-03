@@ -11,8 +11,8 @@ MNT="/mnt/gentoo"
 # Formateo destructivo: déjalo en "YES" para que sea 100% automático.
 ERASE_PARTITIONS="YES"
 
-# Mirror base para stage3 systemd amd64:
-BASE="https://distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64-systemd"
+# Mirror base para stage3 desktop systemd amd64:
+BASE="https://distfiles.gentoo.org/releases/amd64/autobuilds/current-stage3-amd64-desktop-systemd"
 
 # ================== UTILIDADES ==================
 log(){ printf "\n\033[1;32m[+] %s\033[0m\n" "$*"; }
@@ -53,11 +53,11 @@ mount -o rw "${ROOT}" "${MNT}"
 mkdir -p "${MNT}/boot"
 mount -o rw "${BOOT}" "${MNT}/boot"
 
-log "Paso 3) Descargando stage3 systemd amd64 más reciente"
+log "Paso 3) Descargando stage3 desktop systemd amd64 más reciente"
 mkdir -p "${MNT}/var/tmp/stage3"
 cd "${MNT}/var/tmp/stage3"
 # Obtener nombre del último stage3 desde el archivo 'latest-...txt'
-LATEST_TXT="latest-stage3-amd64-systemd.txt"
+LATEST_TXT="latest-stage3-amd64-desktop-systemd.txt"
 wget -q "${BASE}/${LATEST_TXT}" -O "${LATEST_TXT}"
 STAGE_REL=$(awk '/stage3.*tar.*/{print $1; exit}' "${LATEST_TXT}")   || die "No pude parsear ${LATEST_TXT}"
 STAGE_URL="${BASE}/${STAGE_REL}"
@@ -202,6 +202,78 @@ ls -l /boot/grub/grub.cfg
 log "R) IMPORTANTE: Establece un password a root ahora"
 echo "root:gentoo" | chpasswd
 echo "   Password temporal de root: 'gentoo' - CÁMBIALO tras el primer arranque con 'passwd'"
+
+log "S) Creando usuario para KDE"
+useradd -m -G users,wheel,audio,video,input,plugdev -s /bin/bash usuario || true
+echo "usuario:usuario" | chpasswd
+echo "   Usuario: usuario / Password: usuario"
+
+log "T) Configurando sudo para el grupo wheel"
+emerge -q app-admin/sudo || true
+sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+
+log "U) Instalando KDE Plasma con configuración automática"
+# Keywords y USE flags para KDE
+mkdir -p /etc/portage/package.accept_keywords
+cat > /etc/portage/package.accept_keywords/kde <<'KEOF'
+kde-frameworks/* ~amd64
+dev-qt/* ~amd64
+dev-util/vulkan-headers ~amd64
+KEOF
+
+mkdir -p /etc/portage/package.use
+cat > /etc/portage/package.use/00-kde <<'USEEOF'
+# Display manager / compositor
+x11-misc/sddm -wayland
+kde-plasma/kwin -wayland lock
+kde-plasma/kwin-x11 lock
+kde-plasma/plasma-meta -wayland
+kde-plasma/plasma-workspace -wayland
+# Xorg
+x11-base/xorg-server udev
+# Qt6
+dev-qt/qtbase icu gui network xml concurrent widgets libproxy cups dbus vulkan wayland -opengl -gles2-only
+dev-qt/qttools opengl
+dev-qt/qtdeclarative -opengl -vulkan
+dev-qt/qt5compat icu qml
+dev-qt/qtquick3d -opengl -vulkan
+dev-qt/qtmultimedia qml -opengl -vulkan
+# KDE Frameworks
+kde-frameworks/kconfig dbus qml
+kde-frameworks/kwindowsystem wayland
+kde-frameworks/kcoreaddons dbus
+kde-frameworks/prison qml
+kde-frameworks/kguiaddons wayland
+kde-frameworks/kidletime wayland
+# Qt5
+dev-qt/qtcore icu
+dev-qt/qtgui egl dbus wayland
+# Xwayland
+x11-base/xwayland libei
+# NetworkManager
+net-wireless/wpa_supplicant dbus
+dev-libs/qcoro dbus
+# Otros
+sys-libs/zlib minizip
+x11-libs/gtk+ X -wayland
+x11-libs/gtk+:3 X -wayland
+x11-libs/libdrm video_cards_amdgpu video_cards_nouveau video_cards_intel
+media-libs/mesa -wayland
+media-libs/libcanberra pulseaudio udev alsa -gstreamer
+USEEOF
+
+log "V) Instalando KDE Plasma (esto tomará 1-3 horas)..."
+emerge --autounmask-write --autounmask-continue -q kde-plasma/plasma-meta x11-misc/sddm \
+  kde-apps/dolphin kde-apps/konsole kde-apps/kate www-client/firefox-bin || {
+  etc-update --automode -3
+  emerge -q kde-plasma/plasma-meta x11-misc/sddm kde-apps/dolphin kde-apps/konsole kde-apps/kate www-client/firefox-bin
+}
+
+log "W) Habilitando SDDM (display manager de KDE)"
+systemctl enable sddm
+systemctl set-default graphical.target
+
+log "X) KDE Plasma instalado correctamente"
 
 log "OK dentro del chroot."
 CHROOT_SCRIPT
